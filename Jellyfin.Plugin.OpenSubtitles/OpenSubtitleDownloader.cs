@@ -145,7 +145,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
             var options = new Dictionary<string, string>
             {
                 { "languages", language },
-                { "type", request.ContentType == VideoContentType.Episode ? "episode" : "movie" }
+                //{ "type", request.ContentType == VideoContentType.Episode ? "episode" : "movie" }
             };
 
             if (hash is not null)
