@@ -135,7 +135,7 @@ namespace Jellyfin.Plugin.OpenSubtitles.OpenSubtitlesHandler
             var max = -1;
             var current = 1;
 
-            List<ResponseData> final = new ();
+            List<ResponseData> final = new();
             ApiResponse<SearchResult> last;
             HttpResponse response;
 
@@ -166,7 +166,13 @@ namespace Jellyfin.Plugin.OpenSubtitles.OpenSubtitlesHandler
                     max = last.Data.TotalPages;
                 }
 
+                var currentBefore = current;
                 current = last.Data.Page + 1;
+                var currentAfter = current;
+                if (currentBefore == currentAfter)
+                {
+                    break;
+                }
 
                 final.AddRange(last.Data.Data);
             }
