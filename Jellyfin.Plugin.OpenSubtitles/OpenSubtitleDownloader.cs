@@ -27,6 +27,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
     public class OpenSubtitleDownloader : ISubtitleProvider
     {
         private readonly ILogger<OpenSubtitleDownloader> _logger;
+        private readonly IPluginConfigurationFactory _pluginConfigurationFactory;
         private LoginInfo? _login;
         private DateTime? _limitReset;
         private DateTime? _lastRatelimitLog;
@@ -38,22 +39,23 @@ namespace Jellyfin.Plugin.OpenSubtitles
         /// </summary>
         /// <param name="logger">Instance of the <see cref="ILogger{OpenSubtitleDownloader}"/> interface.</param>
         /// <param name="httpClientFactory">The <see cref="IHttpClientFactory"/> for creating Http Clients.</param>
-        public OpenSubtitleDownloader(ILogger<OpenSubtitleDownloader> logger, IHttpClientFactory httpClientFactory)
+        /// <param name="pluginConfigurationFactory">The <see cref="IPluginConfigurationFactory"/> for creating Http Clients.</param>
+        public OpenSubtitleDownloader(ILogger<OpenSubtitleDownloader> logger, IHttpClientFactory httpClientFactory, IPluginConfigurationFactory pluginConfigurationFactory)
         {
             _logger = logger;
-
+            _pluginConfigurationFactory = pluginConfigurationFactory;
             var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString();
 
             OpenSubtitlesRequestHelper.Instance = new OpenSubtitlesRequestHelper(httpClientFactory, version);
 
-            OpenSubtitlesPlugin.Instance!.ConfigurationChanged += (_, _) =>
-            {
-                _customApiKey = GetOptions().CustomApiKey;
-                // force a login next time a request is made
-                _login = null;
-            };
+            //OpenSubtitlesPlugin.Instance!.ConfigurationChanged += (_, _) =>
+            //{
+            //    _customApiKey = GetOptions().CustomApiKey;
+            //    // force a login next time a request is made
+            //    _login = null;
+            //};
 
-            _customApiKey = GetOptions().CustomApiKey;
+            _customApiKey = _pluginConfigurationFactory.GetOption().CustomApiKey;
         }
 
         /// <summary>
@@ -115,7 +117,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
                 return Enumerable.Empty<RemoteSubtitleInfo>();
             }
 
-            if (string.IsNullOrEmpty(request.MediaPath))
+            if (false && string.IsNullOrEmpty(request.MediaPath))
             {
                 _logger.LogDebug("Path Missing");
                 return Enumerable.Empty<RemoteSubtitleInfo>();
@@ -124,13 +126,13 @@ namespace Jellyfin.Plugin.OpenSubtitles
             var language = await GetLanguage(request.TwoLetterISOLanguageName, cancellationToken).ConfigureAwait(false);
 
             string? hash = null;
-            if (!Path.GetExtension(request.MediaPath).Equals(".strm", StringComparison.OrdinalIgnoreCase))
+            if (false && !Path.GetExtension(request.MediaPath).Equals(".strm", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    #pragma warning disable CA2007
+#pragma warning disable CA2007
                     await using var fileStream = File.OpenRead(request.MediaPath);
-                    #pragma warning restore CA2007
+#pragma warning restore CA2007
 
                     hash = OpenSubtitlesRequestHelper.ComputeHash(fileStream);
                 }
@@ -202,7 +204,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
             }
 
             return searchResponse.Data
-                .Where(x => MediaFilter(x) && (!request.IsPerfectMatch || (x.Attributes?.MovieHashMatch ?? false)))
+                .Where(x => true || MediaFilter(x) && (!request.IsPerfectMatch || (x.Attributes?.MovieHashMatch ?? false)))
                 .OrderByDescending(x => x.Attributes?.MovieHashMatch ?? false)
                 .ThenByDescending(x => x.Attributes?.DownloadCount)
                 .ThenByDescending(x => x.Attributes?.Ratings)
@@ -221,7 +223,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
                     DateCreated = i.Attributes?.UploadDate,
                     IsHashMatch = i.Attributes?.MovieHashMatch
                 })
-                .Where(i => !string.Equals(i.Format, "sub", StringComparison.OrdinalIgnoreCase) && !string.Equals(i.Format, "idx", StringComparison.OrdinalIgnoreCase));
+                .Where(i => !string.Equals(i.Format, "sub", StringComparison.OrdinalIgnoreCase) && !string.Equals(i.Format, "idx", StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
         private async Task<SubtitleResponse> GetSubtitlesInternal(string id, CancellationToken cancellationToken)
@@ -279,15 +281,15 @@ namespace Jellyfin.Plugin.OpenSubtitles
                 switch (info.Code)
                 {
                     case HttpStatusCode.NotAcceptable when info.Data?.Remaining <= 0:
-                    {
-                        if (_login.User != null)
                         {
-                            _login.User.RemainingDownloads = 0;
-                        }
+                            if (_login.User != null)
+                            {
+                                _login.User.RemainingDownloads = 0;
+                            }
 
-                        _logger.LogError("OpenSubtitles download limit reached");
-                        throw new RateLimitExceededException("OpenSubtitles download limit reached");
-                    }
+                            _logger.LogError("OpenSubtitles download limit reached");
+                            throw new RateLimitExceededException("OpenSubtitles download limit reached");
+                        }
 
                     case HttpStatusCode.Unauthorized:
                         // JWT token expired, obtain a new one and try again?
@@ -374,7 +376,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
                 {
                     _logger.LogError("Login failed due to invalid credentials/API key, invalidating them ({Code} - {Body})", loginResponse.Code, loginResponse.Body);
                     options.CredentialsInvalid = true;
-                    OpenSubtitlesPlugin.Instance!.SaveConfiguration(options);
+                    //OpenSubtitlesPlugin.Instance!.SaveConfiguration(options);
                 }
                 else
                 {
@@ -443,7 +445,8 @@ namespace Jellyfin.Plugin.OpenSubtitles
             throw new NotSupportedException(string.Format(CultureInfo.InvariantCulture, "Language '{0}' is not supported", language));
         }
 
-        private PluginConfiguration GetOptions()
-            => OpenSubtitlesPlugin.Instance!.Configuration;
+        //private PluginConfiguration GetOptions()
+        //    => OpenSubtitlesPlugin.Instance!.Configuration;
+        private PluginConfiguration GetOptions() => this._pluginConfigurationFactory.GetOption();
     }
 }
